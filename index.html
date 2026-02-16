@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rider App - Production Architecture</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="sidebar">
+        <div class="brand">RIDER CORE</div>
+        <nav>
+            <a href="#overview">Overview</a>
+            <a href="#tech-stack">Tech Stack (The Why)</a>
+            <a href="#architecture">Architecture & Scale</a>
+            <a href="#features">Key Features</a>
+            <a href="#requirements">Requirements</a>
+            <a href="#roadmap">Execution Plan</a>
+        </nav>
+        <div class="status">Status: PLANNING</div>
+    </div>
+
+    <main>
+        <header>
+            <h1>Production Architecture Plan</h1>
+            <p class="subtitle">Scalable Real-Time Group Riding Platform (1M+ Users)</p>
+        </header>
+
+        <section id="overview" class="card">
+            <h2>1. The Vision</h2>
+            <p>A high-performance, low-latency mobile application for motorcycle/bicycle groups. The core value is <strong>synchronization</strong>: ensuring every rider knows where the leader is, where the pack is, and capturing the journey seamlessly.</p>
+            <div class="highlight-box">
+                <strong>Core Challenge:</strong> Synchronizing 50+ fast-moving objects (riders) with < 100ms latency on unreliable cellular networks, while rendering smooth 60fps maps.
+            </div>
+        </section>
+
+        <section id="tech-stack" class="card">
+            <h2>2. The Tech Stack (Evaluation & Selection)</h2>
+            
+            <div class="stack-grid">
+                <div class="stack-item">
+                    <h3>Mobile Framework</h3>
+                    <div class="choice">Winner: <strong>Flutter (Dart)</strong></div>
+                    <ul class="pros-cons">
+                        <li>✅ <strong>Why:</strong> Compiled to native ARM code (faster than React Native JS bridge). Skia rendering engine ensures 60fps map overlays even with 100+ markers. Single codebase for iOS/Android.</li>
+                        <li>❌ <strong>Rejects:</strong> React Native (Bridge bottleneck on high-frequency location updates), Swift/Kotlin (Too slow to maintain two codebases).</li>
+                    </ul>
+                </div>
+
+                <div class="stack-item">
+                    <h3>Real-Time Protocol</h3>
+                    <div class="choice">Winner: <strong>MQTT (over WebSockets)</strong></div>
+                    <ul class="pros-cons">
+                        <li>✅ <strong>Why:</strong> Pub/Sub model is perfect for "Groups" (Topic = GroupID). 
+                            <ul>
+                                <li><strong>Low Overhead:</strong> Headers are tiny (2 bytes) compared to HTTP/WS frames. Critical for spotty 4G/5G in remote riding areas.</li>
+                                <li><strong>QoS Levels:</strong> Supports "Fire and Forget" (QoS 0) for location updates (if you miss one, the next one comes in 1s anyway) vs "Guaranteed Delivery" (QoS 1/2) for "Stop/Help" alerts.</li>
+                            </ul>
+                        </li>
+                        <li>❌ <strong>Rejects:</strong> Plain WebSockets (Harder to scale topics/fan-out manually), Firebase Realtime DB (Too expensive at scale, higher latency).</li>
+                    </ul>
+                </div>
+
+                <div class="stack-item">
+                    <h3>Backend Core</h3>
+                    <div class="choice">Winner: <strong>Go (Golang)</strong></div>
+                    <ul class="pros-cons">
+                        <li>✅ <strong>Why:</strong> Handles massive concurrency (Goroutines) with minimal RAM. Perfect for ingesting 1M+ location points per second.</li>
+                        <li>❌ <strong>Rejects:</strong> Node.js (Event loop can block on CPU-heavy geo-calculations), Python (Too slow for high-throughput ingestion).</li>
+                    </ul>
+                </div>
+
+                <div class="stack-item">
+                    <h3>Mapping Engine</h3>
+                    <div class="choice">Winner: <strong>Mapbox GL (Vector Tiles)</strong></div>
+                    <ul class="pros-cons">
+                        <li>✅ <strong>Why:</strong> Much higher customization than Google Maps SDK. Allows custom "Puck" 3D models for riders. Cheaper for high-volume active users (MAU based vs per-load).</li>
+                        <li>❌ <strong>Rejects:</strong> Google Maps (Expensive per-tile/load, less control over 60fps animations of markers).</li>
+                    </ul>
+                </div>
+
+                <div class="stack-item">
+                    <h3>Database Strategy</h3>
+                    <div class="choice">Hot: <strong>Redis (Geospatial)</strong> | Cold: <strong>PostgreSQL (PostGIS)</strong></div>
+                    <ul class="pros-cons">
+                        <li>✅ <strong>Redis:</strong> Stores "Live" location. TTL (Time To Live) keys expire after 5 mins. Fastest read/write.</li>
+                        <li>✅ <strong>PostGIS:</strong> Stores "Trip History" (Breadcrumbs) for video generation. Indestructible reliability.</li>
+                        <li>✅ <strong>TimescaleDB:</strong> Optional layer on Postgres for efficient time-series storage of routes.</li>
+                    </ul>
+                </div>
+            </div>
+        </section>
+
+        <section id="architecture" class="card">
+            <h2>3. Infrastructure & Scale (AWS)</h2>
+            <div class="diagram-text">
+                [Client App] --> [Load Balancer (ALB)] --> [Auto-Scaling Group (Go API)]
+                                      |
+                                      v
+                                [MQTT Broker Cluster (VerneMQ/EMQX)]
+                                      |
+                                  (Updates)
+                                      v
+                                [Redis Cluster] (Live State)
+                                      |
+                                  (Async Archiving)
+                                      v
+                             [Kinesis Firehose] --> [S3 / PostGIS] (Long-term Storage)
+            </div>
+            
+            <h3>Key Scaling Components:</h3>
+            <ul>
+                <li><strong>MQTT Broker (EMQX or VerneMQ):</strong> Handles the "fan-out". If Leader A moves, the broker pushes that update ONLY to the 50 followers in Topic "Group_A". Scales to millions of connections easily.</li>
+                <li><strong>Kinesis:</strong> Buffers the write load. We don't write to Postgres every second. We batch updates every 1-2 minutes to save DB CPU.</li>
+                <li><strong>CDN (CloudFront):</strong> Caches map tiles and static assets (profile pics, group QR codes).</li>
+            </ul>
+        </section>
+
+        <section id="features" class="card">
+            <h2>4. Key Features & Solutions</h2>
+            
+            <div class="feature-list">
+                <div class="feature">
+                    <h4>📡 The "Rubber Band" Logic</h4>
+                    <p><strong>Problem:</strong> Leader gets too far ahead; pack gets separated.</p>
+                    <p><strong>Solution:</strong> App calculates dynamic distance. If Leader > 1km away, Leader's screen flashes amber. If > 2km, flashes red. Followers get "Catch Up" indicators.</p>
+                </div>
+
+                <div class="feature">
+                    <h4>🎥 Memory Video Generation (The "Relive" Killer)</h4>
+                    <p><strong>Tech:</strong> FFmpeg on AWS Lambda.</p>
+                    <p><strong>Flow:</strong>
+                        1. App uploads GPS Trace (JSON) + Photos (with timestamps).<br>
+                        2. Lambda fetches Mapbox Static Images for the route points.<br>
+                        3. FFmpeg stitches Map images + User Photos + moving line animation.<br>
+                        4. Result: A 30s MP4 video of the ride ready to share.
+                    </p>
+                </div>
+
+                <div class="feature">
+                    <h4>🆘 Crash Detection & Fallback</h4>
+                    <p><strong>Logic:</strong> Accelerometer spike > 4G followed by 0 movement for 30s.</p>
+                    <p><strong>Action:</strong> Auto-sends SMS with coordinates to Group Members + Emergency Contacts via Twilio (works even if data is slow, SMS is reliable).</p>
+                </div>
+
+                <div class="feature">
+                    <h4>🔋 Battery Optimization</h4>
+                    <p><strong>Solution:</strong> Adaptive GPS polling. Moving > 50km/h? Poll every 1s. Stopped at lights? Poll every 30s. Background service management is critical here.</p>
+                </div>
+            </div>
+        </section>
+
+        <section id="requirements" class="card">
+            <h2>5. Requirements from You</h2>
+            <p>To build the MVP (Minimum Viable Product), I need:</p>
+            <ul class="checklist">
+                <li><strong>Mapbox Access Token:</strong> For vector maps.</li>
+                <li><strong>AWS Account (IAM User):</strong> With permissions for EC2, S3, RDS, Lambda.</li>
+                <li><strong>Google Cloud Project:</strong> Just for "Places API" (searching for coffee shops/gas stations) and Firebase Auth (simplest phone number login).</li>
+                <li><strong>Twilio Account:</strong> For SMS invites/emergency alerts.</li>
+            </ul>
+        </section>
+
+        <section id="roadmap" class="card">
+            <h2>6. Execution Plan</h2>
+            <div class="step">
+                <span class="step-num">01</span>
+                <strong>Skeleton & Auth:</strong> Flutter setup, Phone Login, Permission handling (Location/Camera).
+            </div>
+            <div class="step">
+                <span class="step-num">02</span>
+                <strong>The "Dot":</strong> Mapbox integration. Show "Me" on the map. Smooth movement interpolation (kalman filters).
+            </div>
+            <div class="step">
+                <span class="step-num">03</span>
+                <strong>The "Ghost":</strong> MQTT Setup. Connect two phones. See Phone B move on Phone A's screen. Tuning latency.
+            </div>
+            <div class="step">
+                <span class="step-num">04</span>
+                <strong>Group Logic:</strong> QR Code scanning (deep links), Leader/Follower states, Kick/Ban logic.
+            </div>
+            <div class="step">
+                <span class="step-num">05</span>
+                <strong>Media Engine:</strong> Trip recording storage (PostGIS) and the FFmpeg pipeline for video generation.
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        <p>Prepared by <strong>OpenClaw</strong> | Target Scale: 1,000,000 Concurrent Users</p>
+    </footer>
+</body>
+</html>
