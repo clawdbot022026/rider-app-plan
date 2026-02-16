@@ -122,9 +122,26 @@
             
             <div class="feature-list">
                 <div class="feature">
-                    <h4>📡 The "Rubber Band" Logic</h4>
-                    <p><strong>Problem:</strong> Leader gets too far ahead; pack gets separated.</p>
-                    <p><strong>Solution:</strong> App calculates dynamic distance. If Leader > 1km away, Leader's screen flashes amber. If > 2km, flashes red. Followers get "Catch Up" indicators.</p>
+                    <h4>🗺️ Smart Route Synchronization</h4>
+                    <p><strong>Leader's Path:</strong> The Leader sets the route. This "Master Path" is broadcast to all members in Gold/High-Contrast color.</p>
+                    <p><strong>Member View:</strong> Members see their own path to the destination relative to the Master Path. If the Leader changes route dynamically, the update propagates to everyone in seconds.</p>
+                </div>
+
+                <div class="feature">
+                    <h4>⚠️ Deviation & Separation Alarms</h4>
+                    <p><strong>The "Leash":</strong> If a rider deviates > 500m from the Master Path (wrong turn), the Leader gets a "Rider Lost" alert. The stray rider gets a "Return to Route" navigation prompt.</p>
+                    <p><strong>Rubber Banding:</strong> Visual cues (Green = Good, Amber = Far, Red = Lost) on the edge of the screen show where the pack is without panning the map.</p>
+                </div>
+
+                <div class="feature">
+                    <h4>🚨 One-Tap Incident Signaling</h4>
+                    <p><strong>Big Buttons:</strong> Gloved-friendly UI. Single tap for "Gas Needed", "Food Stop", or "Police Ahead".</p>
+                    <p><strong>SOS Mode:</strong> Triple-tap or crash detection triggers a "STOP ALL" red alert that overrides everyone's screen with the location of the incident.</p>
+                </div>
+
+                <div class="feature">
+                    <h4>⛽ Collaborative Range Management</h4>
+                    <p><strong>The "Shortest Tank" Rule:</strong> The app tracks bike models. If a Sportster (100km range) is in a group with GS Adventures (400km range), the app suggests gas stops based on the <em>shortest</em> range in the group.</p>
                 </div>
 
                 <div class="feature">
@@ -139,14 +156,8 @@
                 </div>
 
                 <div class="feature">
-                    <h4>🆘 Crash Detection & Fallback</h4>
-                    <p><strong>Logic:</strong> Accelerometer spike > 4G followed by 0 movement for 30s.</p>
-                    <p><strong>Action:</strong> Auto-sends SMS with coordinates to Group Members + Emergency Contacts via Twilio (works even if data is slow, SMS is reliable).</p>
-                </div>
-
-                <div class="feature">
-                    <h4>🔋 Battery Optimization</h4>
-                    <p><strong>Solution:</strong> Adaptive GPS polling. Moving > 50km/h? Poll every 1s. Stopped at lights? Poll every 30s. Background service management is critical here.</p>
+                    <h4>👀 Spectator Mode (Safety)</h4>
+                    <p><strong>Live Link:</strong> Generate a temporary web link for family members to track the group's progress safely without installing the app. (Read-only access to location stream).</p>
                 </div>
             </div>
         </section>
